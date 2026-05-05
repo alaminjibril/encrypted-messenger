@@ -135,42 +135,50 @@ export async function encryptHybrid(plaintext, recipientPublicKeyJwk, senderPubl
 }
 
 export async function decryptHybrid(payload, privateKey) {
-  const { ciphertext, iv, encryptedKey, encryptedKeyForSelf } = payload;
+  // Support both camelCase (client) and snake_case (potential server conversion)
+  const ciphertext = payload.ciphertext || payload.cipher_text;
+  const iv = payload.iv;
+  const encryptedKey = payload.encryptedKey || payload.encrypted_key;
+  const encryptedKeyForSelf = payload.encryptedKeyForSelf || payload.encrypted_key_for_self;
   
-  // 1. Decrypt the AES key using RSA private key
-  // We try encryptedKey first (if we are the recipient), then encryptedKeyForSelf (if we are the sender)
-  let rawAesKey;
-  try {
-    rawAesKey = await window.crypto.subtle.decrypt(
-      { name: 'RSA-OAEP' },
-      privateKey,
-      base64ToArrayBuffer(encryptedKey)
-    );
-  } catch (e) {
-    rawAesKey = await window.crypto.subtle.decrypt(
-      { name: 'RSA-OAEP' },
-      privateKey,
-      base64ToArrayBuffer(encryptedKeyForSelf)
-    );
+  if (!ciphertext || !iv) throw new Error("Invalid payload: missing ciphertext or IV");
+
+  // Try to decrypt with BOTH keys (for recipient and for self)
+  const keysToTry = [encryptedKey, encryptedKeyForSelf].filter(k => !!k);
+  
+  for (const keyBlob of keysToTry) {
+    try {
+      // 1. Decrypt AES Key
+      const rawAesKey = await window.crypto.subtle.decrypt(
+        { name: 'RSA-OAEP' },
+        privateKey,
+        base64ToArrayBuffer(keyBlob)
+      );
+
+      // 2. Import AES Key
+      const aesKey = await window.crypto.subtle.importKey(
+        'raw',
+        rawAesKey,
+        'AES-GCM',
+        false,
+        ['decrypt']
+      );
+
+      // 3. Decrypt Content
+      const decrypted = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: base64ToArrayBuffer(iv) },
+        aesKey,
+        base64ToArrayBuffer(ciphertext)
+      );
+
+      return new TextDecoder().decode(decrypted);
+    } catch (e) {
+      console.warn("Decryption attempt failed for one key blob, trying next...");
+      continue;
+    }
   }
-
-  // 2. Import the AES key
-  const aesKey = await window.crypto.subtle.importKey(
-    'raw',
-    rawAesKey,
-    'AES-GCM',
-    false,
-    ['decrypt']
-  );
-
-  // 3. Decrypt the ciphertext
-  const decrypted = await window.crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64ToArrayBuffer(iv) },
-    aesKey,
-    base64ToArrayBuffer(ciphertext)
-  );
-
-  return new TextDecoder().decode(decrypted);
+  
+  throw new Error("Could not decrypt with any available key");
 }
 
 // --- Helpers ---

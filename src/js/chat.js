@@ -3,7 +3,6 @@ import { encryptHybrid, decryptHybrid, unwrapPrivateKey } from './crypto.js';
 import { getPrivateKey, saveMessage, getLocalMessages } from './storage.js';
 
 const conversationsList = document.getElementById('conversationsList');
-const onlineUsersList = document.getElementById('onlineUsersList');
 const userSearch = document.getElementById('userSearch');
 const chatActive = document.getElementById('chatActive');
 const noChatSelected = document.getElementById('noChatSelected');
@@ -78,7 +77,6 @@ async function refreshChat() {
     const convosChanged = JSON.stringify(convos) !== conversationsList.dataset.lastData;
     if (convosChanged) {
       renderConversations(convos);
-      renderOnlineUsers(convos);
       conversationsList.dataset.lastData = JSON.stringify(convos);
     }
 
@@ -88,8 +86,11 @@ async function refreshChat() {
       for (const msg of history) {
         if (!msg.decryptedContent) {
           try {
-            msg.decryptedContent = await decryptHybrid(msg.payload, privateKeyObject);
+            // Ensure payload is an object
+            const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+            msg.decryptedContent = await decryptHybrid(payload, privateKeyObject);
           } catch (e) {
+            console.error('Decryption failed for msg:', msg.id, e);
             msg.decryptedContent = "[Unable to decrypt]";
           }
         }
@@ -125,16 +126,6 @@ function renderConversations(convos) {
   document.querySelectorAll('.conversation-item').forEach(item => {
     item.addEventListener('click', () => selectRecipient(item.dataset.id));
   });
-}
-
-function renderOnlineUsers(convos) {
-  // Mocking "online" users from existing conversations for the story circles
-  onlineUsersList.innerHTML = convos.slice(0, 5).map(c => `
-    <div class="story-item" data-id="${c.user_id}">
-      <div class="avatar">${c.username[0].toUpperCase()}</div>
-      <span>${(c.display_name || c.username).split(' ')[0]}</span>
-    </div>
-  `).join('');
 }
 
 function renderMessages() {
