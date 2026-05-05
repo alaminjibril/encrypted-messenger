@@ -3,6 +3,7 @@ import { encryptHybrid, decryptHybrid, unwrapPrivateKey } from './crypto.js';
 import { getPrivateKey, saveMessage, getLocalMessages } from './storage.js';
 
 const conversationsList = document.getElementById('conversationsList');
+const onlineUsersList = document.getElementById('onlineUsersList');
 const userSearch = document.getElementById('userSearch');
 const chatActive = document.getElementById('chatActive');
 const noChatSelected = document.getElementById('noChatSelected');
@@ -11,9 +12,11 @@ const activeChatAvatar = document.getElementById('activeChatAvatar');
 const messagesViewport = document.getElementById('messagesViewport');
 const messageInput = document.getElementById('messageInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
-const currentUserEmail = document.getElementById('currentUserEmail');
-const userAvatar = document.getElementById('userAvatar');
 const logoutBtn = document.getElementById('logoutBtn');
+const userAvatar = document.getElementById('userAvatar');
+const toggleDetails = document.getElementById('toggleDetails');
+const closeDetails = document.getElementById('closeDetails');
+const detailsSidebar = document.getElementById('detailsSidebar');
 
 let currentRecipient = null;
 let localMessages = [];
@@ -28,31 +31,31 @@ async function init() {
     return;
   }
 
-  currentUserEmail.textContent = localStorage.getItem('username');
-  userAvatar.textContent = localStorage.getItem('username')[0].toUpperCase();
-
   try {
-    // 1. Get Me (contains our public key)
-    const me = await fetchMe();
-    myPublicKey = me.public_key;
-
-    // 2. Restore Private Key
-    const wrappedKey = await getPrivateKey(userId);
-    const salt = localStorage.getItem('pbkdf2Salt');
+    // 1. Unwrap Private Key
     const password = localStorage.getItem('sessionPassword');
+    const saltBase64 = localStorage.getItem('pbkdf2Salt');
+    const wrappedKeyBase64 = await getPrivateKey(userId);
     
-    if (wrappedKey && salt && password) {
-      privateKeyObject = await unwrapPrivateKey(wrappedKey, password, salt);
-      console.log('Security: Private key restored to memory');
-    } else {
-      throw new Error('Security credentials missing. Please log in again.');
+    if (!wrappedKeyBase64 || !password || !saltBase64) {
+      throw new Error('Encryption session lost');
     }
 
+    privateKeyObject = await unwrapPrivateKey(wrappedKeyBase64, password, saltBase64);
+
+    // 2. Initial Data Load
+    const me = await fetchMe();
+    myPublicKey = me.public_key;
+    userAvatar.textContent = me.username[0].toUpperCase();
+    
     await refreshChat();
-    setInterval(refreshChat, 10000); // Poll for updates
+    
+    // 3. Poll for new messages
+    setInterval(refreshChat, 5000);
+
   } catch (err) {
     console.error(err);
-    alert(err.message);
+    alert('Session Error: ' + err.message);
     window.location.href = '/src/pages/auth.html';
   }
 }
@@ -61,7 +64,7 @@ async function refreshChat() {
   try {
     const convos = await fetchConversations();
     
-    // Cache conversation users so selectRecipient can find them
+    // Update local cache of users for easy lookup
     convos.forEach(c => {
       if (!lastSearchResults.find(u => u.id === c.user_id)) {
         lastSearchResults.push({
@@ -75,13 +78,13 @@ async function refreshChat() {
     const convosChanged = JSON.stringify(convos) !== conversationsList.dataset.lastData;
     if (convosChanged) {
       renderConversations(convos);
+      renderOnlineUsers(convos);
       conversationsList.dataset.lastData = JSON.stringify(convos);
     }
 
     if (currentRecipient) {
       const history = await fetchConversationHistory(currentRecipient.id);
       
-      // Decrypt messages on the fly
       for (const msg of history) {
         if (!msg.decryptedContent) {
           try {
@@ -105,18 +108,17 @@ async function refreshChat() {
 }
 
 function renderConversations(convos) {
-  if (convos.length === 0) {
-    conversationsList.innerHTML = '<div class="list-placeholder"><p>No conversations yet</p></div>';
-    return;
-  }
-
   conversationsList.innerHTML = convos.map(c => `
     <div class="conversation-item ${currentRecipient?.id === c.user_id ? 'active' : ''}" data-id="${c.user_id}">
       <div class="avatar">${c.username[0].toUpperCase()}</div>
       <div class="conversation-info">
-        <h4>${c.display_name || c.username}</h4>
-        <p class="last-msg">Active thread</p>
+        <div class="convo-header">
+          <h4>${c.display_name || c.username}</h4>
+          <span class="time">${new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        <p class="last-msg">Tap to chat securely</p>
       </div>
+      ${c.unread_count > 0 ? `<span class="badge">${c.unread_count}</span>` : ''}
     </div>
   `).join('');
 
@@ -125,77 +127,78 @@ function renderConversations(convos) {
   });
 }
 
+function renderOnlineUsers(convos) {
+  // Mocking "online" users from existing conversations for the story circles
+  onlineUsersList.innerHTML = convos.slice(0, 5).map(c => `
+    <div class="story-item" data-id="${c.user_id}">
+      <div class="avatar">${c.username[0].toUpperCase()}</div>
+      <span>${(c.display_name || c.username).split(' ')[0]}</span>
+    </div>
+  `).join('');
+}
+
+function renderMessages() {
+  messagesViewport.innerHTML = localMessages.map(m => {
+    const isSelf = m.sender_id === userId;
+    return `
+      <div class="message ${isSelf ? 'self' : 'other'}">
+        <div class="content">${m.decryptedContent}</div>
+        <div class="message-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+      </div>
+    `;
+  }).join('');
+  messagesViewport.scrollTop = messagesViewport.scrollHeight;
+}
+
 async function selectRecipient(recipientId) {
   try {
-    // 1. Find user in search results or current conversations
     let user = lastSearchResults.find(u => u.id === recipientId);
-    
-    // 2. Get their public key specifically
     const publicKey = await fetchPublicKey(recipientId);
     
-    // 3. Create recipient object
     currentRecipient = { 
       id: recipientId, 
       public_key: publicKey,
-      username: user ? user.username : (user?.display_name || 'User'),
-      display_name: user ? user.display_name : null
+      username: user?.username || 'User',
+      display_name: user?.display_name || null
     };
-    
+
+    // Update UI
     noChatSelected.classList.add('hidden');
     chatActive.classList.remove('hidden');
-    
     activeChatUser.textContent = currentRecipient.display_name || currentRecipient.username;
     activeChatAvatar.textContent = activeChatUser.textContent[0].toUpperCase();
     
-    // Enable send button if there's already text
-    sendMessageBtn.disabled = !messageInput.value.trim();
-    
+    // Details Sidebar
+    document.getElementById('detailsName').textContent = currentRecipient.display_name || currentRecipient.username;
+    document.getElementById('detailsUsername').textContent = '@' + currentRecipient.username;
+    document.getElementById('detailsAvatar').textContent = activeChatAvatar.textContent;
+
+    // Mobile shell toggle
+    document.querySelector('.app-shell').classList.add('chat-open');
+
     await refreshChat();
   } catch (err) {
     console.error('Failed to select user:', err);
   }
 }
 
-function renderMessages() {
-  messagesViewport.innerHTML = localMessages.slice().reverse().map(m => `
-    <div class="message ${m.from_user_id === userId ? 'sent' : 'received'}">
-      <div class="message-bubble">
-        ${m.decryptedContent}
-      </div>
-      <div class="message-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-    </div>
-  `).join('');
-
-  messagesViewport.scrollTop = messagesViewport.scrollHeight;
-}
-
-// User Search
-let searchTimeout;
+// Event Listeners
 userSearch.addEventListener('input', (e) => {
-  clearTimeout(searchTimeout);
   const query = e.target.value.trim();
-  if (!query) {
-    refreshChat();
-    return;
-  }
+  if (query.length < 3) return;
 
-  searchTimeout = setTimeout(async () => {
+  clearTimeout(window.searchTimeout);
+  window.searchTimeout = setTimeout(async () => {
     try {
       const results = await searchUsers(query);
       lastSearchResults = results;
-      conversationsList.innerHTML = results.map(u => `
-        <div class="conversation-item" data-id="${u.id}">
-          <div class="avatar">${u.username[0].toUpperCase()}</div>
-          <div class="conversation-info">
-            <h4>${u.display_name || u.username}</h4>
-            <p class="last-msg">Click to start secure chat</p>
-          </div>
-        </div>
-      `).join('');
-
-      document.querySelectorAll('.conversation-item').forEach(item => {
-        item.addEventListener('click', () => selectRecipient(item.dataset.id));
-      });
+      renderConversations(results.map(u => ({
+        user_id: u.id,
+        username: u.username,
+        display_name: u.display_name,
+        last_message_at: new Date(),
+        unread_count: 0
+      })));
     } catch (err) {
       console.error(err);
     }
@@ -212,13 +215,8 @@ sendMessageBtn.addEventListener('click', async () => {
 
   try {
     sendMessageBtn.disabled = true;
-    
-    // 1. Encrypt using Hybrid scheme
     const payload = await encryptHybrid(content, currentRecipient.public_key, myPublicKey);
-    
-    // 2. Send
     await sendMessage(currentRecipient.id, payload);
-    
     messageInput.value = '';
     await refreshChat();
   } catch (err) {
@@ -226,6 +224,14 @@ sendMessageBtn.addEventListener('click', async () => {
   } finally {
     sendMessageBtn.disabled = false;
   }
+});
+
+toggleDetails.addEventListener('click', () => {
+  detailsSidebar.classList.toggle('hidden');
+});
+
+closeDetails.addEventListener('click', () => {
+  detailsSidebar.classList.add('hidden');
 });
 
 logoutBtn.addEventListener('click', () => {

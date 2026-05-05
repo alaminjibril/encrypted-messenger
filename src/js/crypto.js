@@ -1,7 +1,3 @@
-// Advanced Encryption Utilities for WhisperBox
-// Implements Hybrid Encryption (RSA + AES-GCM) and Key Wrapping (PBKDF2 + AES-KW)
-
-// --- Key Management ---
 
 export async function generateKeyPair() {
   const keyPair = await window.crypto.subtle.generateKey(
@@ -41,7 +37,6 @@ export async function wrapPrivateKey(privateKey, password, salt) {
     ['wrapKey', 'unwrapKey']
   );
 
-  // 2. Wrap the private key
   // We use AES-GCM with a fixed IV because the backend doesn't provide a slot for an IV
   const wrapped = await window.crypto.subtle.wrapKey(
     'pkcs8',
