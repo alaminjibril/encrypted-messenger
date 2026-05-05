@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Settings | WhisperBox</title>
+  <link rel="stylesheet" href="../styles/global.css">
+  <link rel="stylesheet" href="../styles/chat.css">
+  <style>
+    .settings-container {
+      max-width: 600px;
+      margin: 60px auto;
+      padding: 40px;
+    }
+    .back-link {
+      color: var(--primary);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-container glass animate-fade-in">
+    <a href="./chat.html" class="back-link">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      Back to Messages
+    </a>
+    
+    <h2>Security & Encryption</h2>
+    <div class="key-info" style="margin-top: 24px;">
+      <div class="key-box">
+        <label>Your User ID</label>
+        <code id="userIdDisplay">Loading...</code>
+      </div>
+      <div class="key-box">
+        <label>Public Key (SPKI)</label>
+        <code id="publicKeyDisplay">Loading...</code>
+      </div>
+    </div>
+    
+    <div style="margin-top: 40px; display: flex; flex-direction: column; gap: 16px;">
+      <button class="btn-primary" id="exportBtn">Export Private Key</button>
+      <button class="btn-secondary" id="logoutBtn" style="border-color: var(--error); color: var(--error);">Logout & Clear Data</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { fetchUser } from '../js/api.js';
+    import { getPrivateKey } from '../js/storage.js';
+
+    const userId = localStorage.getItem('userId');
+    if (!userId) window.location.href = './auth.html';
+
+    async function init() {
+      document.getElementById('userIdDisplay').textContent = userId;
+      const user = await fetchUser(userId);
+      document.getElementById('publicKeyDisplay').textContent = user.publicKey;
+      
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.clear();
+        window.location.href = './auth.html';
+      });
+
+      document.getElementById('exportBtn').addEventListener('click', async () => {
+        const pk = await getPrivateKey(userId);
+        const blob = new Blob([pk], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `whisperbox-private-key-${userId}.json`;
+        a.click();
+      });
+    }
+    init();
+  </script>
+</body>
+</html>
