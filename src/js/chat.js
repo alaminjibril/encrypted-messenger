@@ -157,7 +157,7 @@ function renderConversations(convos) {
       <div class="conversation-info">
         <div class="convo-header">
           <h4>${c.display_name || c.username}</h4>
-          <span class="time">${c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+          <span class="time ${c.unread_count > 0 ? 'unread-time' : ''}">${c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
         </div>
         <p class="last-msg">${previewText}</p>
       </div>
@@ -176,11 +176,26 @@ function renderMessages() {
     // Robust sender ID detection
     const senderId = m.from_user_id || m.sender_id || m.sender || m.user_id || m.from;
     const isSelf = String(senderId) === String(currentUserId);
-    
+
+    // WhatsApp Ticks logic for sent messages
+    let ticksHtml = '';
+    if (isSelf) {
+      if (m.read || m.is_read) {
+        ticksHtml = `<span class="ticks read"><svg viewBox="0 0 16 15" width="16" height="15"><path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.346.125.467-.025l6.236-8.033a.412.412 0 0 0-.011-.535zM11.536 3.32l-.478-.372a.365.365 0 0 0-.51.063L5.192 9.879a.32.32 0 0 1-.484.033L1.891 7.399a.366.366 0 0 0-.514.041l-.401.488a.418.418 0 0 0 .044.54l3.194 2.915c.144.14.348.125.469-.025l6.83-8.503a.413.413 0 0 0-.013-.535z"></path></svg></span>`;
+      } else if (m.delivered) {
+        ticksHtml = `<span class="ticks delivered"><svg viewBox="0 0 16 15" width="16" height="15"><path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.346.125.467-.025l6.236-8.033a.412.412 0 0 0-.011-.535zM11.536 3.32l-.478-.372a.365.365 0 0 0-.51.063L5.192 9.879a.32.32 0 0 1-.484.033L1.891 7.399a.366.366 0 0 0-.514.041l-.401.488a.418.418 0 0 0 .044.54l3.194 2.915c.144.14.348.125.469-.025l6.83-8.503a.413.413 0 0 0-.013-.535z"></path></svg></span>`;
+      } else {
+        ticksHtml = `<span class="ticks sent"><svg viewBox="0 0 11 9" width="11" height="9"><path fill="currentColor" d="M3.5 7.6L1.1 5.2c-.3-.3-.8-.3-1.1 0-.3.3-.3.8 0 1.1l3 3c.1.1.3.2.5.2s.4-.1.5-.2l6-6c.3-.3.3-.8 0-1.1-.3-.3-.8-.3-1.1 0L3.5 7.6z"></path></svg></span>`;
+      }
+    }
+
     return `
       <div class="message ${isSelf ? 'self' : 'other'}">
         <div class="content">${m.decryptedContent}</div>
-        <div class="message-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <div class="message-meta">
+          <span class="message-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          ${ticksHtml}
+        </div>
       </div>
     `;
   }).join('');
@@ -241,6 +256,15 @@ messageInput.addEventListener('input', () => {
   sendMessageBtn.disabled = !messageInput.value.trim() || !currentRecipient;
 });
 
+messageInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault(); // Prevent default newline
+    if (!sendMessageBtn.disabled) {
+      sendMessageBtn.click();
+    }
+  }
+});
+
 sendMessageBtn.addEventListener('click', async () => {
   const content = messageInput.value.trim();
   if (!content || !currentRecipient) return;
@@ -257,6 +281,15 @@ sendMessageBtn.addEventListener('click', async () => {
     sendMessageBtn.disabled = false;
   }
 });
+
+// Mobile back button
+const mobileBackBtn = document.getElementById('mobileBackBtn');
+if (mobileBackBtn) {
+  mobileBackBtn.addEventListener('click', () => {
+    document.querySelector('.app-shell').classList.remove('chat-open');
+    currentRecipient = null;
+  });
+}
 
 // Logout functionality
 document.getElementById('logoutBtn').addEventListener('click', () => {
