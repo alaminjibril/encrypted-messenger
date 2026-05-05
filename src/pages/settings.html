@@ -24,7 +24,7 @@
 </head>
 <body>
   <div class="settings-container glass animate-fade-in">
-    <a href="./chat.html" class="back-link">
+    <a href="/src/pages/chat.html" class="back-link">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
       Back to Messages
     </a>
@@ -48,20 +48,20 @@
   </div>
 
   <script type="module">
-    import { fetchUser } from '../js/api.js';
+    import { fetchMe } from '../js/api.js';
     import { getPrivateKey } from '../js/storage.js';
 
     const userId = localStorage.getItem('userId');
-    if (!userId) window.location.href = './auth.html';
+    if (!userId) window.location.href = '/src/pages/auth.html';
 
     async function init() {
       document.getElementById('userIdDisplay').textContent = userId;
-      const user = await fetchUser(userId);
-      document.getElementById('publicKeyDisplay').textContent = user.publicKey;
+      const me = await fetchMe();
+      document.getElementById('publicKeyDisplay').textContent = me.public_key;
       
       document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.clear();
-        window.location.href = './auth.html';
+        window.location.href = '/src/pages/auth.html';
       });
 
       document.getElementById('exportBtn').addEventListener('click', async () => {
