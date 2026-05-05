@@ -98,7 +98,9 @@ async function refreshChat() {
       
       const historyChanged = JSON.stringify(history) !== messagesViewport.dataset.lastData;
       if (historyChanged) {
-        localMessages = history;
+        // Ensure chronological order (oldest at top)
+        const sortedHistory = [...history].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        localMessages = sortedHistory;
         renderMessages();
         messagesViewport.dataset.lastData = JSON.stringify(history);
       }
@@ -130,7 +132,8 @@ function renderConversations(convos) {
 
 function renderMessages() {
   messagesViewport.innerHTML = localMessages.map(m => {
-    const isSelf = m.sender_id === userId;
+    // Use == for loose equality to handle potential string/int UUID differences
+    const isSelf = m.sender_id == userId;
     return `
       <div class="message ${isSelf ? 'self' : 'other'}">
         <div class="content">${m.decryptedContent}</div>
