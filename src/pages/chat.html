@@ -42,10 +42,6 @@
         </div>
       </div>
 
-      <button class="btn-primary floating-action">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        Create New
-      </button>
     </aside>
 
     <!-- 3. Main Chat View -->
@@ -67,7 +63,6 @@
           </div>
           <div class="header-actions">
             <button class="icon-btn"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
-            <button class="icon-btn" id="toggleDetails"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></button>
           </div>
         </header>
 
@@ -89,54 +84,7 @@
         </footer>
       </div>
     </main>
-
-    <!-- 4. Right Details Sidebar -->
-    <aside class="details-sidebar glass" id="detailsSidebar">
-      <header class="details-header">
-        <button class="icon-btn" id="closeDetails"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-      </header>
-      
-      <div class="details-content" id="detailsContent">
-        <div class="profile-card">
-          <div class="large-avatar" id="detailsAvatar">?</div>
-          <h2 id="detailsName">User Name</h2>
-          <span class="status">Online</span>
-        </div>
-
-        <section class="details-section">
-          <h3>About</h3>
-          <p class="bio">Infuriatingly humble travel expert. Social media fanatic. Explorer. Come chat with me 😊</p>
-          <div class="contact-info">
-            <div class="info-item">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-              <span>+1234 5678 91011</span>
-            </div>
-            <div class="info-item">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <span id="detailsUsername">@username</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="details-section">
-          <h3>Settings</h3>
-          <div class="setting-item">
-            <div class="label-group">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              <span>Notification</span>
-            </div>
-            <input type="checkbox" class="toggle" checked>
-          </div>
-          <div class="setting-item">
-            <div class="label-group">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-              <span>Starred Messages</span>
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </div>
-        </section>
-      </div>
-    </aside>
+    </main>
   </div>
 
   <script type="module" src="../js/chat.js"></script>

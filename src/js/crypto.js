@@ -1,22 +1,24 @@
-
+// =========================
+// KEY GENERATION
+// =========================
 export async function generateKeyPair() {
-  const keyPair = await window.crypto.subtle.generateKey(
+  return await window.crypto.subtle.generateKey(
     {
       name: 'RSA-OAEP',
       modulusLength: 2048,
       publicExponent: new Uint8Array([1, 0, 1]),
       hash: 'SHA-256'
     },
-    true, // Must be extractable for wrapping
+    true,
     ['encrypt', 'decrypt']
   );
-
-  return keyPair;
 }
 
+// =========================
+// PRIVATE KEY WRAP / UNWRAP
+// =========================
 export async function wrapPrivateKey(privateKey, password, salt) {
-  // 1. Derive a key from password using PBKDF2
-  const passwordKey = await window.crypto.subtle.importKey(
+  const passwordKey = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(password),
     'PBKDF2',
@@ -24,25 +26,27 @@ export async function wrapPrivateKey(privateKey, password, salt) {
     ['deriveKey']
   );
 
-  const wrappingKey = await window.crypto.subtle.deriveKey(
+  const wrappingKey = await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt,
+      salt,
       iterations: 100000,
       hash: 'SHA-256'
     },
     passwordKey,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['wrapKey', 'unwrapKey']
+    ['wrapKey']
   );
 
-  // We use AES-GCM with a fixed IV because the backend doesn't provide a slot for an IV
-  const wrapped = await window.crypto.subtle.wrapKey(
+  // ⚠️ NOTE: Ideally IV should be random and stored
+  const iv = new Uint8Array(12);
+
+  const wrapped = await crypto.subtle.wrapKey(
     'pkcs8',
     privateKey,
     wrappingKey,
-    { name: 'AES-GCM', iv: new Uint8Array(12) }
+    { name: 'AES-GCM', iv }
   );
 
   return arrayBufferToBase64(wrapped);
@@ -52,8 +56,7 @@ export async function unwrapPrivateKey(wrappedKeyBase64, password, saltBase64) {
   const salt = base64ToArrayBuffer(saltBase64);
   const wrappedKey = base64ToArrayBuffer(wrappedKeyBase64);
 
-  // 1. Derive the same wrapping key
-  const passwordKey = await window.crypto.subtle.importKey(
+  const passwordKey = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(password),
     'PBKDF2',
@@ -61,21 +64,20 @@ export async function unwrapPrivateKey(wrappedKeyBase64, password, saltBase64) {
     ['deriveKey']
   );
 
-  const wrappingKey = await window.crypto.subtle.deriveKey(
+  const wrappingKey = await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt,
+      salt,
       iterations: 100000,
       hash: 'SHA-256'
     },
     passwordKey,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['wrapKey', 'unwrapKey']
+    ['unwrapKey']
   );
 
-  // 2. Unwrap the private key
-  const privateKey = await window.crypto.subtle.unwrapKey(
+  return await crypto.subtle.unwrapKey(
     'pkcs8',
     wrappedKey,
     wrappingKey,
@@ -84,43 +86,38 @@ export async function unwrapPrivateKey(wrappedKeyBase64, password, saltBase64) {
     true,
     ['decrypt']
   );
-
-  return privateKey;
 }
 
-// --- Hybrid Encryption ---
-
+// =========================
+// HYBRID ENCRYPTION
+// =========================
 export async function encryptHybrid(plaintext, recipientPublicKeyJwk, senderPublicKeyJwk) {
-  // 1. Generate a random AES-GCM key and IV
-  const aesKey = await window.crypto.subtle.generateKey(
+  const aesKey = await crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 },
     true,
     ['encrypt']
   );
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
 
-  // 2. Encrypt the plaintext with AES-GCM
-  const encoded = new TextEncoder().encode(plaintext);
-  const ciphertext = await window.crypto.subtle.encrypt(
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     aesKey,
-    encoded
+    new TextEncoder().encode(plaintext)
   );
 
-  // 3. Export AES key to encrypt it with RSA
-  const rawAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
+  const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
 
-  // 4. Import RSA Public Keys
   const rsaRecipient = await importPublicKey(recipientPublicKeyJwk);
   const rsaSender = await importPublicKey(senderPublicKeyJwk);
 
-  // 5. Encrypt AES key with both RSA keys
-  const encryptedKey = await window.crypto.subtle.encrypt(
+  const encryptedKey = await crypto.subtle.encrypt(
     { name: 'RSA-OAEP' },
     rsaRecipient,
     rawAesKey
   );
-  const encryptedKeyForSelf = await window.crypto.subtle.encrypt(
+
+  const encryptedKeyForSelf = await crypto.subtle.encrypt(
     { name: 'RSA-OAEP' },
     rsaSender,
     rawAesKey
@@ -134,29 +131,34 @@ export async function encryptHybrid(plaintext, recipientPublicKeyJwk, senderPubl
   };
 }
 
+// =========================
+// DECRYPTION (FIXED + ROBUST)
+// =========================
 export async function decryptHybrid(payload, privateKey) {
-  // Support both camelCase (client) and snake_case (potential server conversion)
+  if (!payload) throw new Error("Missing payload");
+
   const ciphertext = payload.ciphertext || payload.cipher_text;
   const iv = payload.iv;
-  const encryptedKey = payload.encryptedKey || payload.encrypted_key;
-  const encryptedKeyForSelf = payload.encryptedKeyForSelf || payload.encrypted_key_for_self;
-  
-  if (!ciphertext || !iv) throw new Error("Invalid payload: missing ciphertext or IV");
 
-  // Try to decrypt with BOTH keys (for recipient and for self)
-  const keysToTry = [encryptedKey, encryptedKeyForSelf].filter(k => !!k);
-  
+  const encryptedKey = payload.encryptedKey || payload.encrypted_key;
+  const encryptedKeyForSelf =
+    payload.encryptedKeyForSelf || payload.encrypted_key_for_self;
+
+  if (!ciphertext || !iv) {
+    throw new Error("Invalid payload: missing ciphertext or IV");
+  }
+
+  const keysToTry = [encryptedKey, encryptedKeyForSelf].filter(Boolean);
+
   for (const keyBlob of keysToTry) {
     try {
-      // 1. Decrypt AES Key
-      const rawAesKey = await window.crypto.subtle.decrypt(
+      const rawAesKey = await crypto.subtle.decrypt(
         { name: 'RSA-OAEP' },
         privateKey,
         base64ToArrayBuffer(keyBlob)
       );
 
-      // 2. Import AES Key
-      const aesKey = await window.crypto.subtle.importKey(
+      const aesKey = await crypto.subtle.importKey(
         'raw',
         rawAesKey,
         'AES-GCM',
@@ -164,32 +166,30 @@ export async function decryptHybrid(payload, privateKey) {
         ['decrypt']
       );
 
-      // 3. Decrypt Content
-      const decrypted = await window.crypto.subtle.decrypt(
+      const decrypted = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: base64ToArrayBuffer(iv) },
         aesKey,
         base64ToArrayBuffer(ciphertext)
       );
 
       return new TextDecoder().decode(decrypted);
-    } catch (e) {
-      console.warn("Decryption attempt failed for one key blob, trying next...");
+    } catch (err) {
       continue;
     }
   }
-  
-  throw new Error("Could not decrypt with any available key");
+
+  throw new Error("Decryption failed for all keys");
 }
 
-// --- Helpers ---
-
+// =========================
+// KEY IMPORT / EXPORT
+// =========================
 export async function importPublicKey(jwkOrPem) {
-  const format = typeof jwkOrPem === 'string' && !jwkOrPem.startsWith('{') ? 'spki' : 'jwk';
-  const keyData = format === 'jwk' ? JSON.parse(jwkOrPem) : base64ToArrayBuffer(jwkOrPem);
-  
-  return window.crypto.subtle.importKey(
-    format,
-    keyData,
+  const isJwk = typeof jwkOrPem === 'string' && jwkOrPem.startsWith('{');
+
+  return await crypto.subtle.importKey(
+    isJwk ? 'jwk' : 'spki',
+    isJwk ? JSON.parse(jwkOrPem) : base64ToArrayBuffer(jwkOrPem),
     { name: 'RSA-OAEP', hash: 'SHA-256' },
     true,
     ['encrypt']
@@ -197,17 +197,15 @@ export async function importPublicKey(jwkOrPem) {
 }
 
 export async function exportPublicKey(key) {
-  const exported = await window.crypto.subtle.exportKey('spki', key);
+  const exported = await crypto.subtle.exportKey('spki', key);
   return arrayBufferToBase64(exported);
 }
 
+// =========================
+// HELPERS (IMPROVED)
+// =========================
 export function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
 export function base64ToArrayBuffer(base64) {

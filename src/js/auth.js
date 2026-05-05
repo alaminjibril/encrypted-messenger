@@ -9,13 +9,12 @@ const authBtn = document.getElementById('authBtn');
 const btnText = authBtn.querySelector('.btn-text');
 const spinner = authBtn.querySelector('.spinner');
 const errorMessage = document.getElementById('errorMessage');
-const authSubtitle = document.getElementById('authSubtitle');
 const toggleText = document.getElementById('toggleText');
-
 const usernameGroup = document.getElementById('usernameGroup');
+
 const usernameInput = document.getElementById('username');
-const emailLabel = document.getElementById('emailLabel');
 const emailInput = document.getElementById('email');
+const formTitle = document.getElementById('formTitle');
 
 let isLogin = true;
 
@@ -25,21 +24,19 @@ toggleAuth.addEventListener('click', (e) => {
   
   if (isLogin) {
     btnText.textContent = 'Sign In';
-    authSubtitle.textContent = 'Secure End-to-End Encrypted Messaging';
-    toggleText.innerHTML = "Don't have an account? <a href='#' id='toggleAuth'>Sign Up</a>";
+    formTitle.textContent = 'Log In';
+    toggleText.innerHTML = `<p>Don't have an account? <a href="#" id="toggleAuth">Create an account</a></p><p class="subtext">It will take less than a minute.</p>`;
     confirmPasswordGroup.classList.add('hidden');
     usernameGroup.classList.add('hidden');
-    emailLabel.textContent = 'Username';
-    emailInput.placeholder = 'johndoe123';
+    emailInput.placeholder = 'Username';
     usernameInput.required = false;
   } else {
     btnText.textContent = 'Create Account';
-    authSubtitle.textContent = 'Join the private conversation';
-    toggleText.innerHTML = "Already have an account? <a href='#' id='toggleAuth'>Sign In</a>";
+    formTitle.textContent = 'Create an account';
+    toggleText.innerHTML = `<p>Already have an account? <a href="#" id="toggleAuth">Sign In</a></p>`;
     confirmPasswordGroup.classList.remove('hidden');
     usernameGroup.classList.remove('hidden');
-    emailLabel.textContent = 'Full Name or Email';
-    emailInput.placeholder = 'John Doe (Public)';
+    emailInput.placeholder = 'Full Name or Email';
     usernameInput.required = true;
   }
   

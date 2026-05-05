@@ -13,19 +13,18 @@ const messageInput = document.getElementById('messageInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const userAvatar = document.getElementById('userAvatar');
-const toggleDetails = document.getElementById('toggleDetails');
-const closeDetails = document.getElementById('closeDetails');
-const detailsSidebar = document.getElementById('detailsSidebar');
 
 let currentRecipient = null;
 let localMessages = [];
 let privateKeyObject = null;
 let myPublicKey = null;
 let lastSearchResults = [];
-const userId = localStorage.getItem('userId');
+// Retrieve userId fresh to avoid any stale data
+let currentUserId = localStorage.getItem('userId');
 
 async function init() {
-  if (!userId) {
+  currentUserId = localStorage.getItem('userId');
+  if (!currentUserId) {
     window.location.href = '/src/pages/auth.html';
     return;
   }
@@ -34,7 +33,7 @@ async function init() {
     // 1. Unwrap Private Key
     const password = localStorage.getItem('sessionPassword');
     const saltBase64 = localStorage.getItem('pbkdf2Salt');
-    const wrappedKeyBase64 = await getPrivateKey(userId);
+    const wrappedKeyBase64 = await getPrivateKey(currentUserId);
     
     if (!wrappedKeyBase64 || !password || !saltBase64) {
       throw new Error('Encryption session lost');
@@ -74,6 +73,40 @@ async function refreshChat() {
       }
     });
 
+    // Decrypt conversation previews
+    const lastDataStr = conversationsList.dataset.lastData || "[]";
+    const lastData = JSON.parse(lastDataStr);
+
+    for (const c of convos) {
+      if (c.last_message_payload) {
+        try {
+          const payload = typeof c.last_message_payload === 'string' ? JSON.parse(c.last_message_payload) : c.last_message_payload;
+          c.decryptedPreview = await decryptHybrid(payload, privateKeyObject);
+        } catch (e) {
+          c.decryptedPreview = "🔒 Encrypted Message";
+        }
+      } else {
+        // Fallback: fetch the last message from history to create a preview
+        const oldConvo = lastData.find(old => old.user_id === c.user_id);
+        if (oldConvo && oldConvo.decryptedPreview && oldConvo.last_message_at === c.last_message_at) {
+          c.decryptedPreview = oldConvo.decryptedPreview; // Use cached preview
+        } else {
+          try {
+            const history = await fetchConversationHistory(c.user_id);
+            if (history && history.length > 0) {
+              const latestMsg = history.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              const payload = typeof latestMsg.payload === 'string' ? JSON.parse(latestMsg.payload) : latestMsg.payload;
+              c.decryptedPreview = await decryptHybrid(payload, privateKeyObject);
+            } else {
+              c.decryptedPreview = "No messages yet";
+            }
+          } catch (err) {
+            c.decryptedPreview = "🔒 Encrypted Message";
+          }
+        }
+      }
+    }
+
     const convosChanged = JSON.stringify(convos) !== conversationsList.dataset.lastData;
     if (convosChanged) {
       renderConversations(convos);
@@ -111,19 +144,26 @@ async function refreshChat() {
 }
 
 function renderConversations(convos) {
-  conversationsList.innerHTML = convos.map(c => `
+  conversationsList.innerHTML = convos.map(c => {
+    // Determine the preview text
+    const previewText = c.decryptedPreview || "🔒 Encrypted Message";
+    const unreadBadge = (c.unread_count && c.unread_count > 0) 
+      ? `<span class="badge">${c.unread_count}</span>` 
+      : '';
+
+    return `
     <div class="conversation-item ${currentRecipient?.id === c.user_id ? 'active' : ''}" data-id="${c.user_id}">
       <div class="avatar">${c.username[0].toUpperCase()}</div>
       <div class="conversation-info">
         <div class="convo-header">
           <h4>${c.display_name || c.username}</h4>
-          <span class="time">${new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="time">${c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
         </div>
-        <p class="last-msg">Tap to chat securely</p>
+        <p class="last-msg">${previewText}</p>
       </div>
-      ${c.unread_count > 0 ? `<span class="badge">${c.unread_count}</span>` : ''}
+      ${unreadBadge}
     </div>
-  `).join('');
+  `}).join('');
 
   document.querySelectorAll('.conversation-item').forEach(item => {
     item.addEventListener('click', () => selectRecipient(item.dataset.id));
@@ -131,9 +171,12 @@ function renderConversations(convos) {
 }
 
 function renderMessages() {
+
   messagesViewport.innerHTML = localMessages.map(m => {
-    // Use == for loose equality to handle potential string/int UUID differences
-    const isSelf = m.sender_id == userId;
+    // Robust sender ID detection
+    const senderId = m.from_user_id || m.sender_id || m.sender || m.user_id || m.from;
+    const isSelf = String(senderId) === String(currentUserId);
+    
     return `
       <div class="message ${isSelf ? 'self' : 'other'}">
         <div class="content">${m.decryptedContent}</div>
@@ -161,11 +204,6 @@ async function selectRecipient(recipientId) {
     chatActive.classList.remove('hidden');
     activeChatUser.textContent = currentRecipient.display_name || currentRecipient.username;
     activeChatAvatar.textContent = activeChatUser.textContent[0].toUpperCase();
-    
-    // Details Sidebar
-    document.getElementById('detailsName').textContent = currentRecipient.display_name || currentRecipient.username;
-    document.getElementById('detailsUsername').textContent = '@' + currentRecipient.username;
-    document.getElementById('detailsAvatar').textContent = activeChatAvatar.textContent;
 
     // Mobile shell toggle
     document.querySelector('.app-shell').classList.add('chat-open');
@@ -220,17 +258,15 @@ sendMessageBtn.addEventListener('click', async () => {
   }
 });
 
-toggleDetails.addEventListener('click', () => {
-  detailsSidebar.classList.toggle('hidden');
-});
-
-closeDetails.addEventListener('click', () => {
-  detailsSidebar.classList.add('hidden');
-});
-
-logoutBtn.addEventListener('click', () => {
+// Logout functionality
+document.getElementById('logoutBtn').addEventListener('click', () => {
   localStorage.clear();
   window.location.href = '/src/pages/auth.html';
+});
+
+// Navigation functionality
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  window.location.href = '/src/pages/settings.html';
 });
 
 init();
