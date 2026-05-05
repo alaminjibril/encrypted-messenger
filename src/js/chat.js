@@ -23,7 +23,7 @@ const userId = localStorage.getItem('userId');
 
 async function init() {
   if (!userId) {
-    window.location.href = './auth.html';
+    window.location.href = '/src/pages/auth.html';
     return;
   }
 
@@ -52,7 +52,7 @@ async function init() {
   } catch (err) {
     console.error(err);
     alert(err.message);
-    window.location.href = './auth.html';
+    window.location.href = '/src/pages/auth.html';
   }
 }
 
@@ -196,7 +196,7 @@ sendMessageBtn.addEventListener('click', async () => {
 
 logoutBtn.addEventListener('click', () => {
   localStorage.clear();
-  window.location.href = './auth.html';
+  window.location.href = '/src/pages/auth.html';
 });
 
 init();

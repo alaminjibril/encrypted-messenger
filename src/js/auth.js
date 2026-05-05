@@ -75,7 +75,7 @@ authForm.addEventListener('submit', async (e) => {
       localStorage.setItem('pbkdf2Salt', data.user.pbkdf2_salt);
       localStorage.setItem('sessionPassword', password);
 
-      window.location.href = './chat.html';
+      window.location.href = '/src/pages/chat.html';
     } else {
       const username = usernameInput.value.trim();
       const displayName = identifier;
