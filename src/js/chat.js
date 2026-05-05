@@ -19,6 +19,7 @@ let currentRecipient = null;
 let localMessages = [];
 let privateKeyObject = null;
 let myPublicKey = null;
+let lastSearchResults = [];
 const userId = localStorage.getItem('userId');
 
 async function init() {
@@ -59,7 +60,23 @@ async function init() {
 async function refreshChat() {
   try {
     const convos = await fetchConversations();
-    renderConversations(convos);
+    
+    // Cache conversation users so selectRecipient can find them
+    convos.forEach(c => {
+      if (!lastSearchResults.find(u => u.id === c.user_id)) {
+        lastSearchResults.push({
+          id: c.user_id,
+          username: c.username,
+          display_name: c.display_name
+        });
+      }
+    });
+
+    const convosChanged = JSON.stringify(convos) !== conversationsList.dataset.lastData;
+    if (convosChanged) {
+      renderConversations(convos);
+      conversationsList.dataset.lastData = JSON.stringify(convos);
+    }
 
     if (currentRecipient) {
       const history = await fetchConversationHistory(currentRecipient.id);
@@ -75,8 +92,12 @@ async function refreshChat() {
         }
       }
       
-      localMessages = history;
-      renderMessages();
+      const historyChanged = JSON.stringify(history) !== messagesViewport.dataset.lastData;
+      if (historyChanged) {
+        localMessages = history;
+        renderMessages();
+        messagesViewport.dataset.lastData = JSON.stringify(history);
+      }
     }
   } catch (err) {
     console.error('Refresh failed:', err);
@@ -106,20 +127,28 @@ function renderConversations(convos) {
 
 async function selectRecipient(recipientId) {
   try {
-    // 1. Get user info
-    const searchResults = await searchUsers(recipientId); // Simple search fallback
-    const user = searchResults.find(u => u.id === recipientId);
+    // 1. Find user in search results or current conversations
+    let user = lastSearchResults.find(u => u.id === recipientId);
     
     // 2. Get their public key specifically
     const publicKey = await fetchPublicKey(recipientId);
     
-    currentRecipient = { ...user, public_key: publicKey };
+    // 3. Create recipient object
+    currentRecipient = { 
+      id: recipientId, 
+      public_key: publicKey,
+      username: user ? user.username : (user?.display_name || 'User'),
+      display_name: user ? user.display_name : null
+    };
     
     noChatSelected.classList.add('hidden');
     chatActive.classList.remove('hidden');
     
     activeChatUser.textContent = currentRecipient.display_name || currentRecipient.username;
     activeChatAvatar.textContent = activeChatUser.textContent[0].toUpperCase();
+    
+    // Enable send button if there's already text
+    sendMessageBtn.disabled = !messageInput.value.trim();
     
     await refreshChat();
   } catch (err) {
@@ -153,6 +182,7 @@ userSearch.addEventListener('input', (e) => {
   searchTimeout = setTimeout(async () => {
     try {
       const results = await searchUsers(query);
+      lastSearchResults = results;
       conversationsList.innerHTML = results.map(u => `
         <div class="conversation-item" data-id="${u.id}">
           <div class="avatar">${u.username[0].toUpperCase()}</div>
@@ -170,6 +200,10 @@ userSearch.addEventListener('input', (e) => {
       console.error(err);
     }
   }, 500);
+});
+
+messageInput.addEventListener('input', () => {
+  sendMessageBtn.disabled = !messageInput.value.trim() || !currentRecipient;
 });
 
 sendMessageBtn.addEventListener('click', async () => {

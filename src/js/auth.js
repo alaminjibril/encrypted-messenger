@@ -38,8 +38,8 @@ toggleAuth.addEventListener('click', (e) => {
     toggleText.innerHTML = "Already have an account? <a href='#' id='toggleAuth'>Sign In</a>";
     confirmPasswordGroup.classList.remove('hidden');
     usernameGroup.classList.remove('hidden');
-    emailLabel.textContent = 'Display Name';
-    emailInput.placeholder = 'John Doe';
+    emailLabel.textContent = 'Full Name or Email';
+    emailInput.placeholder = 'John Doe (Public)';
     usernameInput.required = true;
   }
   
@@ -117,7 +117,7 @@ authForm.addEventListener('submit', async (e) => {
       localStorage.setItem('pbkdf2Salt', saltBase64);
       localStorage.setItem('sessionPassword', password);
 
-      window.location.href = './chat.html';
+      window.location.href = '/src/pages/chat.html';
     }
   } catch (err) {
     errorMessage.textContent = err.message;

@@ -15,8 +15,19 @@ export async function signup(payload) {
   });
 
   if (!response.ok) {
+    if (response.status === 409) {
+      throw new Error('Username already taken. Please choose another one.');
+    }
     const error = await response.json();
-    throw new Error(Array.isArray(error.detail) ? error.detail[0].msg : (error.message || 'Signup failed'));
+    let message = 'Registration failed.';
+    
+    if (Array.isArray(error.detail)) {
+      message = error.detail[0].msg;
+    } else if (typeof error.detail === 'string') {
+      message = error.detail;
+    }
+    
+    throw new Error(message);
   }
 
   return response.json();
@@ -30,8 +41,11 @@ export async function login(username, password) {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Invalid username or password.');
+    }
     const error = await response.json();
-    throw new Error(error.detail || 'Invalid credentials');
+    throw new Error(error.detail || 'Login failed. Please check your connection.');
   }
 
   return response.json();
@@ -43,7 +57,10 @@ export async function fetchMe() {
     headers: { 'Authorization': `Bearer ${token}` }
   });
 
-  if (!response.ok) throw new Error('Session expired');
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired. Please log in again.');
+    throw new Error('Could not fetch user profile.');
+  }
   return response.json();
 }
 
@@ -59,8 +76,12 @@ export async function sendMessage(to, payload) {
   });
 
   if (!response.ok) {
+    if (response.status === 404) throw new Error('Recipient user not found.');
+    if (response.status === 400) throw new Error('Cannot send a message to yourself.');
+    if (response.status === 401) throw new Error('Authentication failed. Please re-login.');
+    
     const error = await response.json();
-    throw new Error(error.detail || 'Failed to send message');
+    throw new Error(error.detail || 'Failed to send message.');
   }
 
   return response.json();
@@ -72,7 +93,10 @@ export async function fetchConversations() {
     headers: { 'Authorization': `Bearer ${token}` }
   });
 
-  if (!response.ok) throw new Error('Failed to fetch conversations');
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Authentication failed.');
+    throw new Error('Failed to load conversations.');
+  }
   return response.json();
 }
 
@@ -85,7 +109,10 @@ export async function fetchConversationHistory(userId, before = null) {
     headers: { 'Authorization': `Bearer ${token}` }
   });
 
-  if (!response.ok) throw new Error('Failed to fetch history');
+  if (!response.ok) {
+    if (response.status === 404) throw new Error('Chat history not found.');
+    throw new Error('Failed to load message history.');
+  }
   return response.json();
 }
 
@@ -95,7 +122,10 @@ export async function searchUsers(query) {
     headers: { 'Authorization': `Bearer ${token}` }
   });
 
-  if (!response.ok) throw new Error('Search failed');
+  if (!response.ok) {
+    if (response.status === 422) throw new Error('Search query is too short.');
+    throw new Error('Search failed.');
+  }
   return response.json();
 }
 
@@ -105,7 +135,10 @@ export async function fetchPublicKey(userId) {
     headers: { 'Authorization': `Bearer ${token}` }
   });
 
-  if (!response.ok) throw new Error('Public key not found');
+  if (!response.ok) {
+    if (response.status === 404) throw new Error('Could not find public key for this user.');
+    throw new Error('Encryption key retrieval failed.');
+  }
   const data = await response.json();
   return data.public_key;
 }
