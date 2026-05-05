@@ -301,6 +301,49 @@
 
 .message-input-area {
   padding: 24px;
+  position: relative;
+}
+
+.emoji-picker {
+  position: absolute;
+  bottom: 80px;
+  left: 24px;
+  width: 320px;
+  max-height: 250px;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  border: 1px solid #e2e8f0;
+  overflow-y: auto;
+  z-index: 50;
+  padding: 16px;
+}
+
+.emoji-picker.hidden {
+  display: none;
+}
+
+.emoji-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.emoji-item {
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.emoji-item:hover {
+  background: #f1f5f9;
 }
 
 .input-container {

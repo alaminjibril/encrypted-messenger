@@ -13,6 +13,9 @@ const messageInput = document.getElementById('messageInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const userAvatar = document.getElementById('userAvatar');
+const emojiBtn = document.getElementById('emojiBtn');
+const emojiPicker = document.getElementById('emojiPicker');
+const emojiGrid = document.getElementById('emojiGrid');
 
 let currentRecipient = null;
 let localMessages = [];
@@ -301,5 +304,40 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 document.getElementById('settingsBtn').addEventListener('click', () => {
   window.location.href = '/src/pages/settings.html';
 });
+
+// Emoji Picker Logic
+const commonEmojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','☺️','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩','👻','💀','👽','👾','🤖','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾', '👍', '👎', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦵', '🦿', '🦶', '👣', '👂', '🦻', '👃', '🫀', '🫁', '🧠', '🦷', '🦴', '👀', '👁', '👅', '👄', '💋', '🩸'];
+
+if (emojiGrid && emojiBtn && emojiPicker) {
+  // Populate grid
+  emojiGrid.innerHTML = commonEmojis.map(e => `<div class="emoji-item">${e}</div>`).join('');
+  
+  // Toggle picker
+  emojiBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    emojiPicker.classList.toggle('hidden');
+  });
+
+  // Handle selection
+  emojiGrid.addEventListener('click', (e) => {
+    if (e.target.classList.contains('emoji-item')) {
+      const emoji = e.target.textContent;
+      const start = messageInput.selectionStart;
+      const end = messageInput.selectionEnd;
+      messageInput.value = messageInput.value.substring(0, start) + emoji + messageInput.value.substring(end);
+      messageInput.selectionStart = messageInput.selectionEnd = start + emoji.length;
+      
+      // Trigger input event to update send button state
+      messageInput.dispatchEvent(new Event('input'));
+    }
+  });
+
+  // Hide when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
+      emojiPicker.classList.add('hidden');
+    }
+  });
+}
 
 init();
