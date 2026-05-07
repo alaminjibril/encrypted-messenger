@@ -1,6 +1,5 @@
-// =========================
+
 // KEY GENERATION
-// =========================
 export async function generateKeyPair() {
   return await window.crypto.subtle.generateKey(
     {
@@ -14,9 +13,7 @@ export async function generateKeyPair() {
   );
 }
 
-// =========================
 // PRIVATE KEY WRAP / UNWRAP
-// =========================
 export async function wrapPrivateKey(privateKey, password, salt) {
   const passwordKey = await crypto.subtle.importKey(
     'raw',
@@ -88,9 +85,9 @@ export async function unwrapPrivateKey(wrappedKeyBase64, password, saltBase64) {
   );
 }
 
-// =========================
+
 // HYBRID ENCRYPTION
-// =========================
+
 export async function encryptHybrid(plaintext, recipientPublicKeyJwk, senderPublicKeyJwk) {
   const aesKey = await crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 },
@@ -131,9 +128,8 @@ export async function encryptHybrid(plaintext, recipientPublicKeyJwk, senderPubl
   };
 }
 
-// =========================
+
 // DECRYPTION (FIXED + ROBUST)
-// =========================
 export async function decryptHybrid(payload, privateKey) {
   if (!payload) throw new Error("Missing payload");
 
@@ -181,9 +177,8 @@ export async function decryptHybrid(payload, privateKey) {
   throw new Error("Decryption failed for all keys");
 }
 
-// =========================
+
 // KEY IMPORT / EXPORT
-// =========================
 export async function importPublicKey(jwkOrPem) {
   const isJwk = typeof jwkOrPem === 'string' && jwkOrPem.startsWith('{');
 
@@ -201,9 +196,7 @@ export async function exportPublicKey(key) {
   return arrayBufferToBase64(exported);
 }
 
-// =========================
-// HELPERS (IMPROVED)
-// =========================
+
 export function arrayBufferToBase64(buffer) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }

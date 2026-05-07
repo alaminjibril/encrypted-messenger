@@ -41,6 +41,7 @@
 }
 
 .status-indicator.online { background: #22c55e; }
+.status-indicator.offline { background: #94a3b8; }
 
 .nav-icons {
   display: flex;

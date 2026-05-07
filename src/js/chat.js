@@ -22,6 +22,11 @@ let localMessages = [];
 let privateKeyObject = null;
 let myPublicKey = null;
 let lastSearchResults = [];
+// Pagination state
+let earliestMessageTimestamp = null;
+let hasMoreMessages = true;
+let isLoadingMore = false;
+
 // Retrieve userId fresh to avoid any stale data
 let currentUserId = localStorage.getItem('userId');
 
@@ -51,13 +56,69 @@ async function init() {
     
     await refreshChat();
     
-    // 3. Poll for new messages
+    // 3. Poll for new messages (Heartbeat)
     setInterval(refreshChat, 5000);
+
+    // 4. Scroll listener for pagination
+    messagesViewport.addEventListener('scroll', handleScroll);
 
   } catch (err) {
     console.error(err);
     alert('Session Error: ' + err.message);
     window.location.href = '/src/pages/auth.html';
+  }
+}
+
+async function handleScroll() {
+  if (messagesViewport.scrollTop < 50 && !isLoadingMore && hasMoreMessages && currentRecipient) {
+    loadMoreMessages();
+  }
+}
+
+async function loadMoreMessages() {
+  if (!earliestMessageTimestamp) return;
+  
+  try {
+    isLoadingMore = true;
+    const scrollPos = messagesViewport.scrollHeight - messagesViewport.scrollTop;
+    
+    // Fetch messages BEFORE the oldest one we have
+    const olderMessages = await fetchConversationHistory(currentRecipient.id, earliestMessageTimestamp);
+    
+    if (olderMessages.length === 0) {
+      hasMoreMessages = false;
+      return;
+    }
+
+    // Decrypt older messages
+    for (const msg of olderMessages) {
+      try {
+        const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
+        msg.decryptedContent = await decryptHybrid(payload, privateKeyObject);
+      } catch (e) {
+        msg.decryptedContent = "[Unable to decrypt]";
+      }
+    }
+
+    // Add to local list and sort
+    const allMessages = [...olderMessages, ...localMessages];
+    const uniqueMessages = Array.from(new Map(allMessages.map(m => [m.id, m])).values());
+    localMessages = uniqueMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    
+    // Update earliest timestamp
+    if (olderMessages.length > 0) {
+      earliestMessageTimestamp = localMessages[0].created_at;
+    }
+
+    renderMessages();
+    
+    // Restore scroll position
+    messagesViewport.scrollTop = messagesViewport.scrollHeight - scrollPos;
+
+  } catch (err) {
+    console.error('Load more failed:', err);
+  } finally {
+    isLoadingMore = false;
   }
 }
 
@@ -71,7 +132,8 @@ async function refreshChat() {
         lastSearchResults.push({
           id: c.user_id,
           username: c.username,
-          display_name: c.display_name
+          display_name: c.display_name,
+          is_online: c.is_online
         });
       }
     });
@@ -89,10 +151,9 @@ async function refreshChat() {
           c.decryptedPreview = "🔒 Encrypted Message";
         }
       } else {
-        // Fallback: fetch the last message from history to create a preview
         const oldConvo = lastData.find(old => old.user_id === c.user_id);
         if (oldConvo && oldConvo.decryptedPreview && oldConvo.last_message_at === c.last_message_at) {
-          c.decryptedPreview = oldConvo.decryptedPreview; // Use cached preview
+          c.decryptedPreview = oldConvo.decryptedPreview;
         } else {
           try {
             const history = await fetchConversationHistory(c.user_id);
@@ -122,11 +183,9 @@ async function refreshChat() {
       for (const msg of history) {
         if (!msg.decryptedContent) {
           try {
-            // Ensure payload is an object
             const payload = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;
             msg.decryptedContent = await decryptHybrid(payload, privateKeyObject);
           } catch (e) {
-            console.error('Decryption failed for msg:', msg.id, e);
             msg.decryptedContent = "[Unable to decrypt]";
           }
         }
@@ -134,11 +193,30 @@ async function refreshChat() {
       
       const historyChanged = JSON.stringify(history) !== messagesViewport.dataset.lastData;
       if (historyChanged) {
-        // Ensure chronological order (oldest at top)
         const sortedHistory = [...history].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        
+        const wasAtBottom = messagesViewport.scrollHeight - messagesViewport.scrollTop - messagesViewport.clientHeight < 50;
+        
         localMessages = sortedHistory;
+        if (localMessages.length > 0 && !earliestMessageTimestamp) {
+          earliestMessageTimestamp = localMessages[0].created_at;
+        }
+
         renderMessages();
+        
+        if (wasAtBottom) {
+          messagesViewport.scrollTop = messagesViewport.scrollHeight;
+        }
+        
         messagesViewport.dataset.lastData = JSON.stringify(history);
+      }
+
+      // Update Header Status
+      const recipientStatus = convos.find(c => c.user_id === currentRecipient.id);
+      const statusText = document.querySelector('.online-status');
+      if (recipientStatus && statusText) {
+        statusText.textContent = recipientStatus.is_online ? 'Online' : 'Offline';
+        statusText.style.color = recipientStatus.is_online ? '#22c55e' : '#94a3b8';
       }
     }
   } catch (err) {
@@ -148,15 +226,20 @@ async function refreshChat() {
 
 function renderConversations(convos) {
   conversationsList.innerHTML = convos.map(c => {
-    // Determine the preview text
     const previewText = c.decryptedPreview || "🔒 Encrypted Message";
     const unreadBadge = (c.unread_count && c.unread_count > 0) 
       ? `<span class="badge">${c.unread_count}</span>` 
       : '';
+    
+    const isOnline = c.is_online || false;
+    const statusClass = isOnline ? 'online' : 'offline';
 
     return `
     <div class="conversation-item ${currentRecipient?.id === c.user_id ? 'active' : ''}" data-id="${c.user_id}">
-      <div class="avatar">${c.username[0].toUpperCase()}</div>
+      <div class="avatar-wrapper">
+        <div class="avatar">${c.username[0].toUpperCase()}</div>
+        <div class="status-indicator ${statusClass}"></div>
+      </div>
       <div class="conversation-info">
         <div class="convo-header">
           <h4>${c.display_name || c.username}</h4>
@@ -174,13 +257,10 @@ function renderConversations(convos) {
 }
 
 function renderMessages() {
-
   messagesViewport.innerHTML = localMessages.map(m => {
-    // Robust sender ID detection
     const senderId = m.from_user_id || m.sender_id || m.sender || m.user_id || m.from;
     const isSelf = String(senderId) === String(currentUserId);
 
-    // WhatsApp Ticks logic for sent messages
     let ticksHtml = '';
     if (isSelf) {
       if (m.read || m.is_read) {
@@ -202,7 +282,6 @@ function renderMessages() {
       </div>
     `;
   }).join('');
-  messagesViewport.scrollTop = messagesViewport.scrollHeight;
 }
 
 async function selectRecipient(recipientId) {
@@ -217,22 +296,24 @@ async function selectRecipient(recipientId) {
       display_name: user?.display_name || null
     };
 
-    // Update UI
+    earliestMessageTimestamp = null;
+    hasMoreMessages = true;
+    localMessages = [];
+
     noChatSelected.classList.add('hidden');
     chatActive.classList.remove('hidden');
     activeChatUser.textContent = currentRecipient.display_name || currentRecipient.username;
     activeChatAvatar.textContent = activeChatUser.textContent[0].toUpperCase();
 
-    // Mobile shell toggle
     document.querySelector('.app-shell').classList.add('chat-open');
 
     await refreshChat();
+    messagesViewport.scrollTop = messagesViewport.scrollHeight;
   } catch (err) {
     console.error('Failed to select user:', err);
   }
 }
 
-// Event Listeners
 userSearch.addEventListener('input', (e) => {
   const query = e.target.value.trim();
   if (query.length < 3) return;
@@ -246,6 +327,7 @@ userSearch.addEventListener('input', (e) => {
         user_id: u.id,
         username: u.username,
         display_name: u.display_name,
+        is_online: u.is_online,
         last_message_at: new Date(),
         unread_count: 0
       })));
@@ -261,7 +343,7 @@ messageInput.addEventListener('input', () => {
 
 messageInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault(); // Prevent default newline
+    e.preventDefault();
     if (!sendMessageBtn.disabled) {
       sendMessageBtn.click();
     }
@@ -278,6 +360,7 @@ sendMessageBtn.addEventListener('click', async () => {
     await sendMessage(currentRecipient.id, payload);
     messageInput.value = '';
     await refreshChat();
+    messagesViewport.scrollTop = messagesViewport.scrollHeight;
   } catch (err) {
     alert('Send failed: ' + err.message);
   } finally {
@@ -285,7 +368,6 @@ sendMessageBtn.addEventListener('click', async () => {
   }
 });
 
-// Mobile back button
 const mobileBackBtn = document.getElementById('mobileBackBtn');
 if (mobileBackBtn) {
   mobileBackBtn.addEventListener('click', () => {
@@ -294,31 +376,25 @@ if (mobileBackBtn) {
   });
 }
 
-// Logout functionality
 document.getElementById('logoutBtn').addEventListener('click', () => {
   localStorage.clear();
   window.location.href = '/src/pages/auth.html';
 });
 
-// Navigation functionality
 document.getElementById('settingsBtn').addEventListener('click', () => {
   window.location.href = '/src/pages/settings.html';
 });
 
-// Emoji Picker Logic
 const commonEmojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','☺️','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩','👻','💀','👽','👾','🤖','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾', '👍', '👎', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦵', '🦿', '🦶', '👣', '👂', '🦻', '👃', '🫀', '🫁', '🧠', '🦷', '🦴', '👀', '👁', '👅', '👄', '💋', '🩸'];
 
 if (emojiGrid && emojiBtn && emojiPicker) {
-  // Populate grid
   emojiGrid.innerHTML = commonEmojis.map(e => `<div class="emoji-item">${e}</div>`).join('');
   
-  // Toggle picker
   emojiBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     emojiPicker.classList.toggle('hidden');
   });
 
-  // Handle selection
   emojiGrid.addEventListener('click', (e) => {
     if (e.target.classList.contains('emoji-item')) {
       const emoji = e.target.textContent;
@@ -326,13 +402,10 @@ if (emojiGrid && emojiBtn && emojiPicker) {
       const end = messageInput.selectionEnd;
       messageInput.value = messageInput.value.substring(0, start) + emoji + messageInput.value.substring(end);
       messageInput.selectionStart = messageInput.selectionEnd = start + emoji.length;
-      
-      // Trigger input event to update send button state
       messageInput.dispatchEvent(new Event('input'));
     }
   });
 
-  // Hide when clicking outside
   document.addEventListener('click', (e) => {
     if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
       emojiPicker.classList.add('hidden');
